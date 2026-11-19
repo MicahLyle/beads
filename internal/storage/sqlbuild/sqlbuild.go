@@ -11,7 +11,10 @@
 // intentionally NOT unified and stays in each stack.
 package sqlbuild
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // FilterTables configures table names for the filter builders, allowing the
 // same filter logic to target both the issues and wisps table families.
@@ -38,6 +41,44 @@ func OptionalWispTable(name string) bool {
 // DepTargetExpr resolves a dependency row's target across the three
 // mutually-exclusive target columns.
 const DepTargetExpr = "COALESCE(depends_on_issue_id, depends_on_wisp_id, depends_on_external)"
+
+// depTargetColumns are DepTargetExpr's operands, in COALESCE order.
+var depTargetColumns = [...]string{"depends_on_issue_id", "depends_on_wisp_id", "depends_on_external"}
+
+// DepTargetUnion renders an index-friendly equivalent of
+//
+//	SELECT <selectList> FROM <table> WHERE <extraWhere> AND DepTargetExpr <match>
+//
+// as three UNION ALL branches, one per typed target column. Branch k keeps the
+// rows whose COALESCE resolves to column k (the earlier columns are NULL) and
+// applies match to that bare column, so the branches partition the rows the
+// COALESCE predicate selects and each can seek idx_dep_*_target or the
+// (type, target) composites. A COALESCE(...) predicate can use no index, and
+// go-mysql-server does not index-merge an OR of distinct columns. The
+// partition is exact without relying on ck_dep_one_target.
+//
+// selectList may name the branch's target column as {target}. extraWhere (may
+// be empty) and match may hold placeholders; the returned args repeat
+// extraArgs then matchArgs once per branch, in placeholder order.
+func DepTargetUnion(table, selectList, extraWhere string, extraArgs []any, match string, matchArgs []any) (string, []any) {
+	branches := make([]string, 0, len(depTargetColumns))
+	args := make([]any, 0, len(depTargetColumns)*(len(extraArgs)+len(matchArgs)))
+	for i, column := range depTargetColumns {
+		var conds []string
+		if extraWhere != "" {
+			conds = append(conds, extraWhere)
+		}
+		for _, earlier := range depTargetColumns[:i] {
+			conds = append(conds, earlier+" IS NULL")
+		}
+		conds = append(conds, column+" "+match)
+		branches = append(branches, fmt.Sprintf("SELECT %s FROM %s WHERE %s",
+			strings.ReplaceAll(selectList, "{target}", column), table, strings.Join(conds, " AND ")))
+		args = append(args, extraArgs...)
+		args = append(args, matchArgs...)
+	}
+	return strings.Join(branches, "\n\t\t\t\tUNION ALL\n\t\t\t\t"), args
+}
 
 // IssueBaseColumns is the column list for the issues/wisps row itself,
 // without the lease overlay. Use IssueSelectColumns for full hydration;

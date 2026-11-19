@@ -62,13 +62,12 @@ func (s *EmbeddedDoltStore) CountIssuesByGroup(ctx context.Context, filter types
 func (s *EmbeddedDoltStore) CountDependents(ctx context.Context, issueID string) (int64, error) {
 	var n int64
 	err := s.withConn(ctx, false, func(tx *sql.Tx) error {
-		var perm, wisp int64
-		if err := tx.QueryRowContext(ctx,
-			`SELECT count(*) FROM dependencies WHERE `+depTargetExpr+` = ?`, issueID).Scan(&perm); err != nil {
+		perm, err := issueops.CountDepTargetInTx(ctx, tx, "dependencies", "", issueID, nil)
+		if err != nil {
 			return err
 		}
-		if err := tx.QueryRowContext(ctx,
-			`SELECT count(*) FROM wisp_dependencies WHERE `+depTargetExpr+` = ?`, issueID).Scan(&wisp); err != nil {
+		wisp, err := issueops.CountDepTargetInTx(ctx, tx, "wisp_dependencies", "", issueID, nil)
+		if err != nil {
 			return err
 		}
 		n = perm + wisp

@@ -153,7 +153,7 @@ func finishReadyWorkWithCounts(items []*types.IssueWithCounts, filter types.Work
 //nolint:gosec // G201: whereSQL/orderBySQL/limitSQL are hardcoded fragments; user input rides ? placeholders.
 func runReadyCountsInTx(ctx context.Context, tx *sql.Tx, tables FilterTables, limit int, preds *readyWorkPredicates, includeWispReverseDeps bool, hyd sqlbuild.CountsHydration) ([]*types.IssueWithCounts, error) {
 	if limit <= 0 {
-		return runSearchQueryInTx(ctx, tx, tables, preds.whereSQL, preds.orderBySQL, preds.limitSQL, preds.args, includeWispReverseDeps, hyd)
+		return runSearchQueryInTx(ctx, tx, tables, nil, preds.whereSQL, preds.orderBySQL, preds.limitSQL, preds.args, includeWispReverseDeps, hyd)
 	}
 
 	idQuery := fmt.Sprintf("SELECT id FROM %s %s %s %s", tables.Main, preds.whereSQL, preds.orderBySQL, preds.limitSQL)
