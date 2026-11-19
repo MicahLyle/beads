@@ -1,3 +1,5 @@
+//go:build !rbd_machine
+
 // Package uimd provides markdown rendering for beads CLI output.
 // Keep this separate from internal/ui so non-markdown ui consumers do not
 // inherit the glamour/chroma dependency graph.

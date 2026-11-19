@@ -118,6 +118,10 @@ the flags appear in the command line.`,
 			resolvedIDs = append(resolvedIDs, r.ResolvedID)
 		}
 
+		if err := rbdCloseRelease(ctx, cmd, results); err != nil {
+			return HandleErrorRespectJSON("%v", err)
+		}
+
 		// Track which stores were mutated so routed closes can commit before
 		// cleanup closes the routed handle. Deduped by pointer.
 		mutatedStores := map[storage.DoltStorage][]string{}
@@ -494,6 +498,9 @@ func init() {
 	closeCmd.Flags().Bool("no-auto", false, "With --continue, show next step but don't claim it")
 	closeCmd.Flags().Bool("suggest-next", false, "Show newly unblocked issues after closing")
 	closeCmd.Flags().Bool("claim-next", false, "Automatically claim the next highest priority available issue")
+	closeCmd.Flags().String("if-assignee", "", "Inside one rbd atomic operation, release the claim only while this assignee holds it, then close")
+	_ = closeCmd.Flags().MarkHidden("if-assignee")
+	closeCmd.MarkFlagsMutuallyExclusive("force", "if-assignee")
 	closeCmd.Flags().String("session", "", "Claude Code session ID (or set CLAUDE_SESSION_ID env var)")
 	closeCmd.ValidArgsFunction = issueIDCompletion
 	rootCmd.AddCommand(closeCmd)

@@ -1257,8 +1257,12 @@ func GetDependentsWithMetadataInTx(ctx context.Context, tx DBTX, issueID string)
 	// Query both dependency tables to find all dependents.
 	var deps []depMeta
 	for _, depTable := range []string{"dependencies", "wisp_dependencies"} {
+		// Per-column branches seek the target indexes; the COALESCE(...) = ?
+		// form scanned the whole table. ORDER BY id keeps that scan's
+		// primary-key order, so dependents come back in the same order.
+		branches, branchArgs := sqlbuild.DepTargetUnion(depTable, "id, issue_id, type", "", nil, "= ?", []any{issueID})
 		rows, err := tx.QueryContext(ctx, fmt.Sprintf(
-			`SELECT issue_id, type FROM %s WHERE %s = ?`, depTable, DepTargetExpr), issueID)
+			`SELECT issue_id, type FROM (%s) dependents ORDER BY id`, branches), branchArgs...)
 		if err != nil {
 			return nil, fmt.Errorf("get dependents from %s: %w", depTable, err)
 		}

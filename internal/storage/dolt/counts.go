@@ -56,17 +56,18 @@ func (s *DoltStore) CountIssuesByGroup(ctx context.Context, filter types.IssueFi
 //
 // Both tables' targets are resolved via depTargetExpr (the split physical
 // columns) rather than the STORED generated depends_on_id, which a count(*)
-// can fail to resolve under the pure-Go GMS analyzer.
+// can fail to resolve under the pure-Go GMS analyzer. Each is counted over
+// per-column branches (issueops.CountDepTargetInTx) that seek the target
+// indexes; depTargetExpr = ? scanned the whole table.
 func (s *DoltStore) CountDependents(ctx context.Context, issueID string) (int64, error) {
 	var n int64
 	err := s.withReadTx(ctx, func(tx *sql.Tx) error {
-		var perm, wisp int64
-		if err := tx.QueryRowContext(ctx,
-			`SELECT count(*) FROM dependencies WHERE `+depTargetExpr+` = ?`, issueID).Scan(&perm); err != nil {
+		perm, err := issueops.CountDepTargetInTx(ctx, tx, "dependencies", "", issueID, nil)
+		if err != nil {
 			return err
 		}
-		if err := tx.QueryRowContext(ctx,
-			`SELECT count(*) FROM wisp_dependencies WHERE `+depTargetExpr+` = ?`, issueID).Scan(&wisp); err != nil {
+		wisp, err := issueops.CountDepTargetInTx(ctx, tx, "wisp_dependencies", "", issueID, nil)
+		if err != nil {
 			return err
 		}
 		n = perm + wisp

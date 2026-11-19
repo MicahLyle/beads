@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/steveyegge/beads/internal/storage/domain"
+	"github.com/steveyegge/beads/internal/storage/sqlbuild"
 	"github.com/steveyegge/beads/internal/types"
 )
 
@@ -22,7 +23,7 @@ func CountDependencyEdgesInTx(ctx context.Context, tx DBTX, sourceID string, dir
 			total += n
 		}
 		if dir == domain.DepDirectionIn || dir == domain.DepDirectionBoth {
-			n, err := countDepWhere(ctx, tx, table, DepTargetExpr+" = ?", typeClause, sourceID, typeArgs)
+			n, err := CountDepTargetInTx(ctx, tx, table, typeClause, sourceID, typeArgs)
 			if err != nil {
 				return 0, err
 			}
@@ -30,6 +31,20 @@ func CountDependencyEdgesInTx(ctx context.Context, tx DBTX, sourceID string, dir
 		}
 	}
 	return total, nil
+}
+
+// CountDepTargetInTx counts the edges in table whose target is targetID. It is
+// countDepWhere(DepTargetExpr+" = ?") rendered as per-column branches
+// (sqlbuild.DepTargetUnion), which seek the target indexes instead of
+// scanning the table.
+func CountDepTargetInTx(ctx context.Context, tx DBTX, table, typeClause string, targetID string, typeArgs []any) (int64, error) {
+	branches, args := sqlbuild.DepTargetUnion(table, "1 AS one", typeClause, typeArgs, "= ?", []any{targetID})
+	q := fmt.Sprintf("SELECT COUNT(*) FROM (%s) edges", branches) //nolint:gosec
+	var n int64
+	if err := tx.QueryRowContext(ctx, q, args...).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count %s: %w", table, err)
+	}
+	return n, nil
 }
 
 func countDepWhere(ctx context.Context, tx DBTX, table, whereExpr, typeClause string, sourceID string, typeArgs []any) (int64, error) {

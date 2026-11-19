@@ -1,3 +1,5 @@
+//go:build !rbd_machine
+
 package uimd
 
 import (

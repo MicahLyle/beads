@@ -223,8 +223,9 @@ func (s *DoltStore) runDoltTransactionRecording(ctx context.Context, commitMsg s
 	// pinned regular transaction. The default journal-off path keeps the
 	// established split transactions untouched.
 	journalEnabled := s.eventsJournalEnabled.Load()
+	singleTx := journalEnabled || RBDOperationActive()
 	ignoredTx := regularTx
-	if !journalEnabled {
+	if !singleTx {
 		// NOTE (GH#3140 metrics skew): the pool-wait bracket above measures only
 		// the FIRST acquisition (the regular conn). A borrow inside
 		// beginIgnoredTxOnBranch that has to wait increments the pool's global
@@ -251,7 +252,7 @@ func (s *DoltStore) runDoltTransactionRecording(ctx context.Context, commitMsg s
 		defer clearIgnoredRecheckScope()
 	}
 
-	tx := &doltTransaction{regularTx: regularTx, ignoredTx: ignoredTx, store: s, journalPinned: journalEnabled}
+	tx := &doltTransaction{regularTx: regularTx, ignoredTx: ignoredTx, store: s, journalPinned: singleTx}
 
 	defer func() {
 		if r := recover(); r != nil {

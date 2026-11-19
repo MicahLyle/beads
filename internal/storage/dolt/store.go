@@ -2438,6 +2438,9 @@ func buildServerDSN(cfg *Config, database string) string {
 // fetch writes only remote-tracking refs, never the working branch. Neither
 // depends on this fresh connection's default checkout.
 func (s *DoltStore) execWithLongTimeout(ctx context.Context, query string, args ...any) error {
+	if RBDOperationActive() {
+		return errors.New("rbd command refused an independent long-timeout SQL session")
+	}
 	cfg, err := mysql.ParseDSN(s.connStr)
 	if err != nil {
 		return fmt.Errorf("failed to parse DSN for long-timeout connection: %w", err)
@@ -2487,6 +2490,9 @@ func (s *DoltStore) execWithLongTimeoutNoTx(ctx context.Context, query string, a
 // connection drops, so a too-short deadline can never converge by retrying.
 // Caller closes.
 func (s *DoltStore) oneShotConn(readTimeout time.Duration) (*sql.DB, error) {
+	if RBDOperationActive() {
+		return nil, errors.New("rbd command refused an independent SQL session")
+	}
 	cfg, err := mysql.ParseDSN(s.connStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse DSN for long-timeout connection: %w", err)
@@ -2603,7 +2609,11 @@ func assertGatewaySessionDatabase(ctx context.Context, db *sql.DB, want string) 
 func openServerConnection(ctx context.Context, cfg *Config) (*sql.DB, string, serverConnFacts, error) {
 	connStr := buildServerDSN(cfg, cfg.Database)
 
-	db, err := sql.Open("mysql", connStr)
+	driverName := "mysql"
+	if rbdDriverEnabled {
+		driverName = "rbd-mysql"
+	}
+	db, err := sql.Open(driverName, connStr)
 	if err != nil {
 		return nil, "", serverConnFacts{}, fmt.Errorf("failed to open Dolt server connection: %w", err)
 	}
@@ -4714,6 +4724,9 @@ func (s *DoltStore) pullTransportReporting(ctx context.Context, remote string) (
 // database with a long read timeout, for merge/pull/conflict operations that can run
 // longer than the default connection timeout. The caller must Close the returned DB.
 func (s *DoltStore) openLongTimeoutConn() (*sql.DB, error) {
+	if RBDOperationActive() {
+		return nil, errors.New("rbd command refused an independent long-timeout SQL session")
+	}
 	cfg, err := mysql.ParseDSN(s.connStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse DSN for long-timeout connection: %w", err)

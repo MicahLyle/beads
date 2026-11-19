@@ -130,7 +130,7 @@ func runFilterSearchQueryInTx(ctx context.Context, tx *sql.Tx, query string, fil
 		limitSQL = fmt.Sprintf("LIMIT %d", eff)
 	}
 	orderBy := sqlbuild.OrderBy(filter.SortBy, filter.SortDesc, "i")
-	out, err := runSearchQueryInTx(ctx, tx, tables, whereSQL, orderBy, limitSQL, args, includeWispReverseDeps, hydrationFor(filter))
+	out, err := runSearchQueryInTx(ctx, tx, tables, filter.IDs, whereSQL, orderBy, limitSQL, args, includeWispReverseDeps, hydrationFor(filter))
 	if err != nil {
 		return nil, err
 	}
@@ -142,9 +142,12 @@ func runFilterSearchQueryInTx(ctx context.Context, tx *sql.Tx, query string, fil
 }
 
 //nolint:gosec // G201: SQL fragments are caller-built from hardcoded shapes
-func runSearchQueryInTx(ctx context.Context, tx *sql.Tx, tables FilterTables, whereSQL, orderBySQL, limitSQL string, args []interface{}, includeWispReverseDeps bool, hyd sqlbuild.CountsHydration) ([]*types.IssueWithCounts, error) {
-	searchSQL, _ := sqlbuild.SearchCountsSQL(tables, nil, whereSQL, orderBySQL, limitSQL, includeWispReverseDeps, hyd)
-	return scanCountsRowsInTx(ctx, tx, tables.Main, searchSQL, args, hyd)
+func runSearchQueryInTx(ctx context.Context, tx *sql.Tx, tables FilterTables, scope []string, whereSQL, orderBySQL, limitSQL string, args []interface{}, includeWispReverseDeps bool, hyd sqlbuild.CountsHydration) ([]*types.IssueWithCounts, error) {
+	// scope is the filter's explicit ids (BuildIssueFilterClauses already ANDs
+	// "id IN (scope)" into whereSQL), so the aggregates are bounded by them.
+	searchSQL, scopeArgs := sqlbuild.SearchCountsSQLScoped(tables, nil, scope, whereSQL, orderBySQL, limitSQL, includeWispReverseDeps, hyd)
+	bound := append(append(make([]interface{}, 0, len(args)+len(scopeArgs)), args...), scopeArgs...)
+	return scanCountsRowsInTx(ctx, tx, tables.Main, searchSQL, bound, hyd)
 }
 
 // scanCountsRowsInTx runs a prebuilt counts mega-query and hydrates each row
