@@ -1162,6 +1162,7 @@ var rootCmd = &cobra.Command{
 			"powershell",
 			"prime",
 			"quickstart",
+			"rbd-capabilities",
 			metrics.SendMetricsSubcommand,
 			"setup",
 			"version",
@@ -1898,6 +1899,14 @@ var rootCmd = &cobra.Command{
 
 		// Sync all state to CommandContext for unified access.
 		syncCommandContext()
+		if rbdOperationRequest != "" {
+			if readonlyMode || proxiedServerMode || isEmbeddedMode() {
+				return fmt.Errorf("rbd atomic command requires direct writable SQL-server mode")
+			}
+			if err := dolt.BeginRBDOperation(rbdOperationRequest); err != nil {
+				return err
+			}
+		}
 
 		// Tips (including sync conflict proactive checks) are shown via maybeShowTip()
 		// after successful command execution, not in PreRun
@@ -1956,6 +1965,9 @@ var rootCmd = &cobra.Command{
 			releaseWorkspaceGates()
 		}()
 
+		if dolt.RBDOperationActive() {
+			return dolt.FinishRBDOperation(rootCtx)
+		}
 		if proxiedServerMode {
 			// Retention maintenance before the provider closes: the journal
 			// this workspace just wrote to is reached through it. In the body

@@ -2460,7 +2460,7 @@ func assertGatewaySessionDatabase(ctx context.Context, db *sql.DB, want string) 
 func openServerConnection(ctx context.Context, cfg *Config) (*sql.DB, string, serverConnFacts, error) {
 	connStr := buildServerDSN(cfg, cfg.Database)
 
-	db, err := sql.Open("mysql", connStr)
+	db, err := sql.Open("rbd-mysql", connStr)
 	if err != nil {
 		return nil, "", serverConnFacts{}, fmt.Errorf("failed to open Dolt server connection: %w", err)
 	}
